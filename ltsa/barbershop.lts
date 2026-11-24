@@ -1,0 +1,47 @@
+// barbershop puzzle
+//when the barbershop is empty customers can enter and wake the barber and get a haircut
+//when the customers enter the shop and it is not empty then they can wait on the waiting chairs until they barber chair is free
+//when the waiting chairs are full the customers can just leave and enter
+//after the customer gets a haircut they must leave.
+
+const N = 3
+const CUSTOMERS = 5
+
+// tracks customers in waiting chairs (0 to N)
+SHOP = SHOP[0][0],
+SHOP[i:0..N][b:0..1] = 
+  (when (i == 0 && b == 0) customer[c:1..CUSTOMERS].enterWake -> customer[c].sitOnBarberChair -> SHOP[i][b+1]
+  |when ((b>0||i>0)&&(i<N))customer[c:1..CUSTOMERS].enterAndWait -> customer[c].sitOnWaitingChair -> SHOP[i+1][b]
+  |when (i == N) customer[c:1..CUSTOMERS].enterFull -> customer[c].leaveFull -> SHOP[i][b]
+  |when (i >0 && b == 0) customer[c:1..CUSTOMERS].sitOnBarberChair -> SHOP[i-1][b+1]
+  |when (i <= N && b==1) customer[c:1..CUSTOMERS].leave -> SHOP[i][b-1]
+  ).
+
+BARBER = (customer[c:1..CUSTOMERS].sitOnBarberChair -> customer[c].cutHair -> BARBER).
+
+	
+CUSTOMER = (enterAndWait -> sitOnWaitingChair ->WAITING
+           |enterWake -> sitOnBarberChair ->GETTING_CUT
+           |enterFull -> leaveFull -> CUSTOMER),
+
+WAITING = (sitOnBarberChair -> GETTING_CUT),
+
+GETTING_CUT = (cutHair -> leave -> CUSTOMER).
+
+
+||SYSTEM = (customer[c:1..CUSTOMERS]:CUSTOMER || SHOP || BARBER).
+
+property NO_CONCURRENT_SHOP_ACCESS = 
+    (customer[c:1..CUSTOMERS].enterAndWait -> NO_CONCURRENT_SHOP_ACCESS
+    |customer[c:1..CUSTOMERS].enterWake -> NO_CONCURRENT_SHOP_ACCESS
+    |customer[c:1..CUSTOMERS].enterAndleaveFull -> NO_CONCURRENT_SHOP_ACCESS
+    |customer[c:1..CUSTOMERS].leaveFull -> NO_CONCURRENT_SHOP_ACCESS
+    |customer[c:1..CUSTOMERS].sitOnBarberChair -> NO_CONCURRENT_SHOP_ACCESS
+    |customer[c:1..CUSTOMERS].sitOnWaitingChair -> NO_CONCURRENT_SHOP_ACCESS
+    |customer[c:1..CUSTOMERS].leave -> NO_CONCURRENT_SHOP_ACCESS).
+
+||SAFE_SYSTEM = (SYSTEM || NO_CONCURRENT_SHOP_ACCESS).
+
+progress CUSTOMERS_SERVED = {customer[c:1..CUSTOMERS].leave}
+progress BARBER_WORKS = {customer[c:1..CUSTOMERS].cutHair}
+progress SHOP_ACTIVE = {customer[1..CUSTOMERS].enter, customer[1..CUSTOMERS].enterWake}

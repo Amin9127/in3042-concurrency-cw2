@@ -1,0 +1,50 @@
+// Friendly Lunch Puzzle - no one eats alone
+
+const N = 4
+
+// tracks [waiting:0..N][eating:0..N][finished:0..N]
+LUNCH = LUNCH[0][0][0],
+LUNCH[w:0..N][e:0..N][f:0..N] = 
+  // Arrive and wait
+  (when (w + e + f < N) friend[p:1..N].arrive -> LUNCH[w+1][e][f]
+
+  // Start eating when at least 2 waiting (they start together)
+  |when (w == 2 && w + e + f <= N) friend[p:1..N].startEat -> friend[q:1..N].startEat -> LUNCH[w-2][e+2][f]
+  // Single person can join if others already eating
+  |when (w + e + f >= 2 && w + e + f <= N) friend[p:1..N].startEat -> LUNCH[w-1][e+1][f]
+
+  // Finish eating - safe when more than 2 eating
+  |when (e > 2 && w + e + f <= N) friend[p:1..N].finishEat -> LUNCH[w][e-1][f+1]
+  // When exactly 1 eating but others finished - can finish (not truly alone)
+  |when (e == 1 && f > 0) friend[p:1..N].finishEat -> LUNCH[w][0][f+1]
+
+  // Leave alone - only when safe (not when e==1 && f==2)
+  |when (f > 0 && (e + f > 2)) friend[p:1..N].leaveAlone -> LUNCH[w][e][f-1]
+  // When exactly 2 finished - both leave together
+  |when (f == 2 && e == 0) friend[p:1..N].leaveTogether -> friend[q:1..N].leaveTogether -> LUNCH[w][0][0]
+  ).
+
+FRIEND = (arrive -> WAITING),
+WAITING = (startEat -> EATING),
+EATING = (finishEat -> FINISHED),
+FINISHED = (leaveAlone -> FRIEND
+           |leaveTogether -> FRIEND).
+
+||SYSTEM = (friend[p:1..N]:FRIEND || LUNCH).
+
+// Property: ensure never exactly 1 person eating
+property NO_SOLO_EATING = COUNT[0],
+COUNT[e:0..N] = 
+  (when (e >= 0 && e < N) friend[p:1..N].startEat -> COUNT[e+1]
+  |when (e > 2) friend[p:1..N].finishEat -> COUNT[e-1]
+  |when (e == 2) friend[p:1..N].finishEat -> friend[q:1..N].finishEat -> COUNT[0]
+  |when (e == 1) friend[p:1..N].finishEat -> COUNT[0]
+  |friend[p:1..N].arrive -> COUNT[e]
+  |friend[p:1..N].leaveTogether -> COUNT[e]
+  |when (e != 1) friend[p:1..N].leaveAlone -> COUNT[e]
+  ).
+
+||SAFE_SYSTEM = (SYSTEM || NO_SOLO_EATING).
+
+progress FRIENDS_EAT = {friend[1..N].startEat}
+progress FRIENDS_LEAVE = {friend[1..N].leaveAlone, friend[1..N].leaveTogether}

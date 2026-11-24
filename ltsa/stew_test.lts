@@ -1,0 +1,62 @@
+const N = 3
+const CUSTOMERS = 5
+
+// shop tracks waiting customers and barber state
+SHOP = SLEEPING,
+SLEEPING = (customer[c:1..CUSTOMERS].enterWake -> WAITING[1]),
+WAITING[i:1..N] = 
+    (when (i < N) customer[c:1..CUSTOMERS].enter -> WAITING[i+1]
+    |when (i == N) customer[c:1..CUSTOMERS].leaveFull -> WAITING[i]
+    |barber.serve -> CUTTING[i-1]
+    ),
+CUTTING[i:0..N-1] = 
+    (when (i > 0) customer[c:1..CUSTOMERS].enter -> CUTTING[i+1]
+    |when (i == N-1) customer[c:1..CUSTOMERS].leaveFull -> CUTTING[i]
+    |barber.cutHair -> if (i == 0) then SLEEPING else WAITING[i]
+    ).
+
+// customer enters, waits for haircut, leaves
+CUSTOMER = (enter -> WAITING
+           |enterWake -> WAITING
+           |leaveFull -> CUSTOMER),
+WAITING = (barber.cutHair -> leave -> CUSTOMER).
+
+// barber serves customers one at a time
+BARBER = (serve -> cutHair -> BARBER).
+
+||SYSTEM = (customer[c:1..CUSTOMERS]:CUSTOMER || SHOP || barber:BARBER).
+
+// properties
+property NO_CONCURRENT_SHOP_ACCESS = 
+    (customer[c:1..CUSTOMERS].enter -> NO_CONCURRENT_SHOP_ACCESS
+    |customer[c:1..CUSTOMERS].enterWake -> NO_CONCURRENT_SHOP_ACCESS
+    |customer[c:1..CUSTOMERS].leaveFull -> NO_CONCURRENT_SHOP_ACCESS
+    |barber.serve -> NO_CONCURRENT_SHOP_ACCESS
+    |barber.cutHair -> NO_CONCURRENT_SHOP_ACCESS).
+
+property BARBER_SERVES_ONLY_WHEN_CUSTOMERS = SLEEPING,
+SLEEPING = (customer[c:1..CUSTOMERS].enterWake -> AWAKE),
+AWAKE = (customer[c:1..CUSTOMERS].enter -> AWAKE
+        |customer[c:1..CUSTOMERS].leaveFull -> AWAKE
+        |barber.serve -> CUTTING
+        ),
+CUTTING = (barber.cutHair -> CHECK),
+CHECK = (customer[c:1..CUSTOMERS].enter -> AWAKE
+        |customer[c:1..CUSTOMERS].leaveFull -> AWAKE
+        |barber.serve -> CUTTING
+        |customer[c:1..CUSTOMERS].enterWake -> SLEEPING
+        ).
+
+property CUSTOMERS_WAIT_FOR_HAIRCUT = (customer[c:1..CUSTOMERS].enter -> WAITING[c]
+                                      |customer[c:1..CUSTOMERS].enterWake -> WAITING[c]
+                                      |customer[c:1..CUSTOMERS].leaveFull -> CUSTOMERS_WAIT_FOR_HAIRCUT),
+WAITING[c:1..CUSTOMERS] = (barber.cutHair -> customer[c].leave -> CUSTOMERS_WAIT_FOR_HAIRCUT).
+
+||SAFE_SYSTEM = (SYSTEM 
+                 || NO_CONCURRENT_SHOP_ACCESS
+                 || BARBER_SERVES_ONLY_WHEN_CUSTOMERS
+                 || CUSTOMERS_WAIT_FOR_HAIRCUT).
+
+progress CUSTOMERS_SERVED = {customer[c:1..CUSTOMERS].leave}
+progress BARBER_WORKS = {barber.cutHair}
+progress SHOP_ACTIVE = {customer[1..CUSTOMERS].enter, customer[1..CUSTOMERS].enterWake}

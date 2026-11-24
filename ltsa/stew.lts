@@ -1,0 +1,49 @@
+// stew pot problem - workers eat from pot, cook refills
+
+const N = 5
+const WORKERS = 3
+
+// pot counts down from N to 0
+// when empty workers need to ask cook to refill
+POT = POT[N],
+POT[i:1..N] = (worker[w:1..WORKERS].getServing -> POT[i-1]),
+POT[0] = (worker[w:1..WORKERS].askRefill -> REFILL_REQUESTED),
+REFILL_REQUESTED = (worker[w:1..WORKERS].askRefill -> REFILL_REQUESTED
+                   |cook.refill -> POT[N]).
+
+WORKER = (getServing -> eat -> WORKER
+         |askRefill -> getServing -> eat -> WORKER).
+
+COOK = (refill -> COOK).
+
+||SYSTEM = (worker[w:1..WORKERS]:WORKER || POT || cook:COOK).
+
+// properties
+
+// pot needs to be accessed atomically
+property NO_CONCURRENT_POT_MODIFICATION = 
+    (worker[w:1..WORKERS].getServing -> NO_CONCURRENT_POT_MODIFICATION
+    |worker[w:1..WORKERS].askRefill -> NO_CONCURRENT_POT_MODIFICATION
+    |cook.refill -> NO_CONCURRENT_POT_MODIFICATION).
+
+// cook shouldn't refill unless someone asks
+property COOK_REFILLS_ONLY_WHEN_EMPTY = SERVING,
+SERVING = (worker[w:1..WORKERS].getServing -> SERVING
+          |worker[w:1..WORKERS].askRefill -> WOKEN),
+WOKEN = (worker[w:1..WORKERS].askRefill -> WOKEN
+        |cook.refill -> SERVING).
+
+// after asking for refill, workers have to wait for cook
+property NO_SERVING_BEFORE_REFILL = SERVING,
+SERVING = (worker[w:1..WORKERS].getServing -> SERVING
+          |worker[w:1..WORKERS].askRefill -> MUST_REFILL),
+MUST_REFILL = (worker[w:1..WORKERS].askRefill -> MUST_REFILL
+              |cook.refill -> SERVING).
+
+||SAFE_SYSTEM = (SYSTEM || NO_CONCURRENT_POT_MODIFICATION
+                 || COOK_REFILLS_ONLY_WHEN_EMPTY
+                 || NO_SERVING_BEFORE_REFILL).
+
+progress WORKERS_EAT = {worker[w:1..WORKERS].eat}
+progress COOK_WORKS = {cook.refill}
+progress POT_ACTIVE = {worker[1..WORKERS].getServing, cook.refill}
